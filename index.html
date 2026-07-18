@@ -1265,12 +1265,36 @@
 
     function getStats() {
       if (!readings.length) return null;
-      const latest = readings[readings.length - 1];
-      const latestDate = new Date(latest.at);
-      const cycleStart = getCycleStart(latestDate);
-      const cycleEnd = getCycleEnd(latestDate);
-      const baseline = getBaseline(latest);
-      const usage = Math.max(0, Number(latest.value) - baseline.value);
+      
+      const latestManual = readings[readings.length - 1];
+      const latestManualDate = new Date(latestManual.at);
+      const cycleStart = getCycleStart(latestManualDate);
+      const cycleEnd = getCycleEnd(latestManualDate);
+      const baseline = getBaseline(latestManual);
+      
+      // 이번 검침 주기에 해당하는 Kocom 자동 검침 데이터 필터링
+      const kocomInCycle = kocomReadings.filter((point) => {
+        const ptDate = new Date(point.at);
+        return ptDate >= cycleStart && ptDate <= cycleEnd;
+      });
+      
+      let latest = latestManual;
+      let latestDate = latestManualDate;
+      let usage = Math.max(0, Number(latestManual.value) - baseline.value);
+      let isKocom = false;
+      
+      // 자동 검침이 있고, 수동 검침보다 더 최신인 경우 자동 검침을 누적사용량 기준으로 사용
+      if (kocomInCycle.length > 0) {
+        const latestKocom = kocomInCycle[kocomInCycle.length - 1];
+        const latestKocomDate = new Date(latestKocom.at);
+        if (latestKocomDate > latestManualDate) {
+          latest = latestKocom;
+          latestDate = latestKocomDate;
+          usage = latestKocom.value;
+          isKocom = true;
+        }
+      }
+      
       const elapsedFromCycleStart = Math.max((latestDate - cycleStart) / MS_PER_DAY, 0);
       const elapsedDaysExact = Math.max((latestDate - baseline.at) / MS_PER_DAY, 0);
       const elapsedDaysForRead = Math.max(1, Math.ceil(elapsedDaysExact));
@@ -1289,7 +1313,8 @@
         dailyByTime: elapsedDaysExact > 0 ? usage / elapsedDaysExact : 0,
         projected,
         projectedBill: calculateElectricBill(projected, cycleStart),
-        baseline
+        baseline,
+        isKocom
       };
     }
 
@@ -1317,7 +1342,10 @@
       dailyByRead.innerHTML = `${fmtNumber.format(stats.dailyByRead)} <span class="unit">kWh</span>`;
       dailyByTime.innerHTML = `${fmtNumber.format(stats.dailyByTime)} <span class="unit">kWh</span>`;
       currentUsage.innerHTML = `${fmtNumber.format(stats.usage)} <span class="unit">kWh</span>`;
-      currentUsageTitle.textContent = `누적사용량 (${stats.elapsedFromCycleStart.toFixed(1)}일)`;
+      
+      const sourceColor = stats.isKocom ? 'var(--ok)' : 'var(--accent)';
+      const sourceText = stats.isKocom ? '자동' : '수동';
+      currentUsageTitle.innerHTML = `누적사용량 (${stats.elapsedFromCycleStart.toFixed(1)}일 · <span style="color: ${sourceColor}; font-weight: 700;">${sourceText}</span>)`;
       projectedUsageTitle.textContent = `월 예상 사용량 (${Math.round(stats.cycleDays)}일)`;
       projectedUsage.innerHTML = `${fmtNumber.format(stats.projected)} <span class="unit">kWh</span>`;
       projectedBill.textContent = `예상 전기요금 ${fmtWon.format(stats.projectedBill.total)}원`;
