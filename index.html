@@ -1248,16 +1248,40 @@
       return [...groups.values()]
         .map((group) => {
           const items = group.items.sort(sortByDate);
-          const latest = items.at(-1);
-          const baseline = getBaseline(latest);
-          const usage = Math.max(0, Number(latest.value) - baseline.value);
+          const latestManual = items.at(-1);
+          const latestManualDate = new Date(latestManual.at);
+          const baseline = getBaseline(latestManual);
+
+          // 해당 주기에 포함되는 Kocom 자동 검침 데이터 필터링
+          const kocomInCycle = kocomReadings.filter((point) => {
+            const ptDate = new Date(point.at);
+            return ptDate >= group.cycleStart && ptDate <= group.cycleEnd;
+          });
+
+          let latest = latestManual;
+          let latestDate = latestManualDate;
+          let usage = Math.max(0, Number(latestManual.value) - baseline.value);
+          let isKocom = false;
+
+          if (kocomInCycle.length > 0) {
+            const latestKocom = kocomInCycle.at(-1);
+            const latestKocomDate = new Date(latestKocom.at);
+            if (latestKocomDate > latestManualDate) {
+              latest = latestKocom;
+              latestDate = latestKocomDate;
+              usage = latestKocom.value;
+              isKocom = true;
+            }
+          }
+
           return {
             ...group,
             latest,
-            latestDate: new Date(latest.at),
+            latestDate,
             baseline,
             usage,
-            count: items.length
+            count: items.length,
+            isKocom
           };
         })
         .sort((a, b) => b.cycleStart - a.cycleStart);
@@ -1448,7 +1472,7 @@
               <div class="month-usage">${fmtNumber.format(summary.usage)} kWh</div>
             </div>
             <div class="month-meta">
-              <span>최신 ${formatShort(summary.latestDate)}</span>
+              <span>최신 ${formatShort(summary.latestDate)} (${summary.isKocom ? "자동" : "수동"})</span>
               <span>기록 ${summary.count}개</span>
               <span>기준 ${fmtNumber.format(summary.baseline.value)} kWh</span>
             </div>
