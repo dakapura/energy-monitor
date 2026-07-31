@@ -930,6 +930,7 @@
     };
     const SUPER_USER_MONTHS = [7, 8, 12, 1, 2];
     const fmtNumber = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 });
+    const fmtNumber1 = new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     const fmtWon = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
     const fmtDateTime = new Intl.DateTimeFormat("ko-KR", {
       year: "numeric",
@@ -1073,7 +1074,7 @@
           return `
             <tr>
               <td>${displayTime}</td>
-              <td>${fmtNumber.format(item.value)} kWh</td>
+              <td>${fmtNumber1.format(item.value)} kWh</td>
             </tr>
           `;
         })
@@ -1365,13 +1366,13 @@
 
       dailyByRead.innerHTML = `${fmtNumber.format(stats.dailyByRead)} <span class="unit">kWh</span>`;
       dailyByTime.innerHTML = `${fmtNumber.format(stats.dailyByTime)} <span class="unit">kWh</span>`;
-      currentUsage.innerHTML = `${fmtNumber.format(stats.usage)} <span class="unit">kWh</span>`;
+      currentUsage.innerHTML = `${fmtNumber1.format(stats.usage)} <span class="unit">kWh</span>`;
       
       const sourceColor = stats.isKocom ? 'var(--ok)' : 'var(--accent)';
       const sourceText = stats.isKocom ? '자동' : '수동';
       currentUsageTitle.innerHTML = `누적사용량 (${stats.elapsedFromCycleStart.toFixed(1)}일 · <span style="color: ${sourceColor}; font-weight: 700;">${sourceText}</span>)`;
       projectedUsageTitle.textContent = `월 예상 사용량 (${Math.round(stats.cycleDays)}일)`;
-      projectedUsage.innerHTML = `${fmtNumber.format(stats.projected)} <span class="unit">kWh</span>`;
+      projectedUsage.innerHTML = `${fmtNumber1.format(stats.projected)} <span class="unit">kWh</span>`;
       projectedBill.textContent = `예상 전기요금 ${fmtWon.format(stats.projectedBill.total)}원`;
       currentUsageHint.textContent = `기준 검침량 ${fmtNumber.format(stats.baseline.value)} kWh`;
       rateTierSummary.textContent = getRateTierSummary(stats.projectedBill);
@@ -1469,7 +1470,7 @@
           <article class="month-item ${summary.key === currentKey ? "current" : ""}">
             <div class="month-top">
               <div class="month-period">${formatCycleLabel(summary.cycleStart, summary.cycleEnd)}</div>
-              <div class="month-usage">${fmtNumber.format(summary.usage)} kWh</div>
+              <div class="month-usage">${fmtNumber1.format(summary.usage)} kWh</div>
             </div>
             <div class="month-meta">
               <span>최신 ${formatShort(summary.latestDate)} (${summary.isKocom ? "자동" : "수동"})</span>
