@@ -261,6 +261,68 @@
       line-height: 1.35;
     }
 
+    .month-proj-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(11, 114, 133, 0.08);
+      color: var(--accent-strong);
+      min-height: 32px;
+      box-sizing: border-box;
+    }
+
+    .month-proj-row.quiet {
+      background: rgba(0, 0, 0, 0.035);
+      color: var(--muted);
+    }
+
+    .proj-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 20px;
+      padding: 0 7px;
+      font-size: 11px;
+      font-weight: 750;
+      border-radius: 4px;
+      background: var(--accent);
+      color: #ffffff;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .proj-badge.quiet {
+      background: #d0d9dd;
+      color: #455a64;
+    }
+
+    .proj-val {
+      font-weight: 760;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+    }
+
+    .proj-val.quiet {
+      color: var(--text);
+      font-weight: 730;
+    }
+
+    .proj-fee {
+      font-weight: 740;
+      font-size: 13px;
+      color: var(--accent);
+    }
+
+    .proj-sub-text {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
     .summary-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -785,30 +847,30 @@
             <div class="rate-block">
               <div class="rate-block-title">하계 (7~8월)</div>
               <div class="rate-rows">
-                <div class="rate-row"><span>~300kWh</span><span>730원 · 105.0원</span></div>
-                <div class="rate-row"><span>301~450kWh</span><span>1,260원 · 174.0원</span></div>
-                <div class="rate-row"><span>450kWh 초과</span><span>6,060원 · 242.3원</span></div>
+                <div class="rate-row"><span>~300kWh</span><span>910원 · 120.0원</span></div>
+                <div class="rate-row"><span>301~450kWh</span><span>1,600원 · 214.6원</span></div>
+                <div class="rate-row"><span>450kWh 초과</span><span>7,300원 · 307.3원</span></div>
               </div>
             </div>
             <div class="rate-block">
               <div class="rate-block-title">슈퍼유저 (7~8월, 12~2월)</div>
               <div class="rate-rows">
                 <div class="rate-row"><span>발동 조건</span><span>1,000kWh 초과</span></div>
-                <div class="rate-row"><span>초과분 단가</span><span>601.3원/kWh</span></div>
+                <div class="rate-row"><span>초과분 단가</span><span>736.2원/kWh</span></div>
               </div>
             </div>
             <div class="rate-block">
               <div class="rate-block-title">기타 계절 (9~6월)</div>
               <div class="rate-rows">
-                <div class="rate-row"><span>~200kWh</span><span>730원 · 105.0원</span></div>
-                <div class="rate-row"><span>201~400kWh</span><span>1,260원 · 174.0원</span></div>
-                <div class="rate-row"><span>400kWh 초과</span><span>6,060원 · 242.3원</span></div>
+                <div class="rate-row"><span>~200kWh</span><span>910원 · 120.0원</span></div>
+                <div class="rate-row"><span>201~400kWh</span><span>1,600원 · 214.6원</span></div>
+                <div class="rate-row"><span>400kWh 초과</span><span>7,300원 · 307.3원</span></div>
               </div>
             </div>
             <div class="rate-block">
               <div class="rate-block-title">계약 및 공통 단가</div>
               <div class="rate-rows">
-                <div class="rate-row"><span>계약 종별</span><span>주택용 고압</span></div>
+                <div class="rate-row"><span>계약 종별</span><span>주택용 저압</span></div>
                 <div class="rate-row"><span>기후환경요금</span><span>9.0원/kWh</span></div>
                 <div class="rate-row"><span>연료비조정요금</span><span>+5.0원/kWh</span></div>
               </div>
@@ -818,8 +880,7 @@
               <div class="rate-rows">
                 <div class="rate-row"><span>전기요금계</span><span>기본+전력량+환경+연료</span></div>
                 <div class="rate-row"><span>부가가치세</span><span>10% 반올림</span></div>
-                <div class="rate-row"><span>전력기금</span><span>2.7%, 10원 미만 절사</span></div>
-                <div class="rate-row"><span>최종 금액</span><span>10원 미만 절사</span></div>
+                <div class="rate-row"><span>전력산업기반기금</span><span>3.2% 절사</span></div>
               </div>
             </div>
           </div>
@@ -1209,7 +1270,7 @@
       const fuelCharge = Math.floor(billedUsage * ELECTRIC_RATE.fuelUnit);
       const electricSubtotal = basicCharge + energyCharge + climateCharge + fuelCharge;
       const vat = Math.round(electricSubtotal * 0.1);
-      const industryFund = Math.floor((electricSubtotal * 0.027) / 10) * 10;
+      const industryFund = Math.floor(electricSubtotal * 0.032);
       const total = Math.floor((electricSubtotal + vat + industryFund) / 10) * 10;
 
       return {
@@ -1275,12 +1336,27 @@
             }
           }
 
+          const elapsedDaysExact = Math.max((latestDate - baseline.at) / MS_PER_DAY, 0);
+          const cycleDays = (group.cycleEnd - group.cycleStart) / MS_PER_DAY;
+          const isInitialPhase = elapsedDaysExact < 1.0;
+          const projected = elapsedDaysExact > 0 ? (usage / elapsedDaysExact) * cycleDays : usage;
+          const projectedBill = calculateElectricBill(projected, group.cycleStart);
+          const measuredBill = calculateElectricBill(usage, group.cycleStart);
+          const hasGap = elapsedDaysExact > 0 && elapsedDaysExact < (cycleDays - 0.25);
+
           return {
             ...group,
             latest,
             latestDate,
             baseline,
             usage,
+            projected,
+            projectedBill,
+            measuredBill,
+            hasGap,
+            isInitialPhase,
+            elapsedDaysExact,
+            cycleDays,
             count: items.length,
             isKocom
           };
@@ -1466,19 +1542,40 @@
 
       const currentKey = getCycleKey(new Date(readings.at(-1).at));
       monthlyList.innerHTML = summaries
-        .map((summary) => `
-          <article class="month-item ${summary.key === currentKey ? "current" : ""}">
+        .map((summary) => {
+          const isCurrent = summary.key === currentKey;
+          const isProportional = summary.hasGap || isCurrent;
+          return `
+          <article class="month-item ${isCurrent ? "current" : ""}">
             <div class="month-top">
               <div class="month-period">${formatCycleLabel(summary.cycleStart, summary.cycleEnd)}</div>
               <div class="month-usage">${fmtNumber1.format(summary.usage)} kWh</div>
             </div>
+            ${isProportional ? (
+              summary.isInitialPhase ? `
+              <div class="month-proj-row quiet">
+                <span class="proj-badge quiet">측정 초기</span>
+                <span class="proj-sub-text">1일 미만 수집 중 (예상 환산 보정 중)</span>
+              </div>
+              ` : `
+              <div class="month-proj-row">
+                <span class="proj-badge">월간 예상</span>
+                <span class="proj-val">${fmtNumber1.format(summary.projected)} kWh</span>
+                <span class="proj-fee">(${fmtWon.format(summary.projectedBill.total)}원)</span>
+              </div>
+              `
+            ) : `
+            <div class="month-proj-row quiet">
+              <span class="proj-badge quiet">확정 요금</span>
+              <span class="proj-val quiet">${fmtWon.format(summary.measuredBill.total)}원</span>
+            </div>
+            `}
             <div class="month-meta">
               <span>최신 ${formatShort(summary.latestDate)} (${summary.isKocom ? "자동" : "수동"})</span>
-              <span>기록 ${summary.count}개</span>
-              <span>기준 ${fmtNumber.format(summary.baseline.value)} kWh</span>
             </div>
           </article>
-        `)
+        `;
+        })
         .join("");
     }
 
