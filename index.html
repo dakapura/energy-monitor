@@ -1191,9 +1191,9 @@
         .find((item) => item.id !== latest.id && new Date(item.at) < new Date(latest.at) && new Date(item.at) >= cycleStart);
     }
 
-    function getBaseline(latest) {
-      const latestDate = new Date(latest.at);
-      const cycleStart = getCycleStart(latestDate);
+    function getBaseline(latest, explicitCycleStart = null) {
+      const cycleStart = explicitCycleStart || (latest ? getCycleStart(new Date(latest.at)) : getCycleStart(new Date()));
+      const latestDate = latest ? new Date(latest.at) : new Date();
       const previous = [...readings]
         .reverse()
         .find((item) => new Date(item.at) < cycleStart);
@@ -1289,17 +1289,18 @@
     }
 
     function getMonthlySummaries() {
-      if (!readings.length) return [];
+      if (!readings.length && !kocomReadings.length) return [];
 
       const groups = new Map();
+
+      // 1. 수동 검침 데이터 등록
       readings.forEach((item) => {
         const itemDate = new Date(item.at);
-        const cycleStart = getCycleStart(itemDate);
         const key = getCycleKey(itemDate);
         if (!groups.has(key)) {
           groups.set(key, {
             key,
-            cycleStart,
+            cycleStart: getCycleStart(itemDate),
             cycleEnd: getCycleEnd(itemDate),
             items: []
           });
@@ -1307,12 +1308,39 @@
         groups.get(key).items.push(item);
       });
 
+      // 2. Kocom 자동 검침 데이터 등록 (수동 검침이 없는 주기도 열릴 수 있도록)
+      kocomReadings.forEach((point) => {
+        const ptDate = new Date(point.at);
+        const key = getCycleKey(ptDate);
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            cycleStart: getCycleStart(ptDate),
+            cycleEnd: getCycleEnd(ptDate),
+            items: []
+          });
+        }
+      });
+
+      // 3. 현재 시각(new Date())의 검침 주기 무조건 기본 보장 (날짜 도달 시 자동 개시)
+      const now = new Date();
+      const currentKey = getCycleKey(now);
+      if (!groups.has(currentKey)) {
+        groups.set(currentKey, {
+          key: currentKey,
+          cycleStart: getCycleStart(now),
+          cycleEnd: getCycleEnd(now),
+          items: []
+        });
+      }
+
       return [...groups.values()]
         .map((group) => {
           const items = group.items.sort(sortByDate);
-          const latestManual = items.at(-1);
-          const latestManualDate = new Date(latestManual.at);
-          const baseline = getBaseline(latestManual);
+          const hasManual = items.length > 0;
+          const latestManual = hasManual ? items.at(-1) : null;
+          const latestManualDate = latestManual ? new Date(latestManual.at) : null;
+          const baseline = getBaseline(latestManual, group.cycleStart);
 
           // 해당 주기에 포함되는 Kocom 자동 검침 데이터 필터링
           const kocomInCycle = kocomReadings.filter((point) => {
@@ -1321,14 +1349,14 @@
           });
 
           let latest = latestManual;
-          let latestDate = latestManualDate;
-          let usage = Math.max(0, Number(latestManual.value) - baseline.value);
+          let latestDate = latestManualDate || group.cycleStart;
+          let usage = hasManual ? Math.max(0, Number(latestManual.value) - baseline.value) : 0;
           let isKocom = false;
 
           if (kocomInCycle.length > 0) {
             const latestKocom = kocomInCycle.at(-1);
             const latestKocomDate = new Date(latestKocom.at);
-            if (latestKocomDate > latestManualDate) {
+            if (!latestManualDate || latestKocomDate > latestManualDate) {
               latest = latestKocom;
               latestDate = latestKocomDate;
               usage = latestKocom.value;
@@ -1336,9 +1364,10 @@
             }
           }
 
-          const elapsedDaysExact = Math.max((latestDate - baseline.at) / MS_PER_DAY, 0);
+          const hasData = hasManual || kocomInCycle.length > 0;
+          const elapsedDaysExact = hasData ? Math.max((latestDate - baseline.at) / MS_PER_DAY, 0) : 0;
           const cycleDays = (group.cycleEnd - group.cycleStart) / MS_PER_DAY;
-          const isInitialPhase = elapsedDaysExact < 1.0;
+          const isInitialPhase = !hasData || elapsedDaysExact < 1.0;
           const projected = elapsedDaysExact > 0 ? (usage / elapsedDaysExact) * cycleDays : usage;
           const projectedBill = calculateElectricBill(projected, group.cycleStart);
           const measuredBill = calculateElectricBill(usage, group.cycleStart);
@@ -1358,46 +1387,57 @@
             elapsedDaysExact,
             cycleDays,
             count: items.length,
-            isKocom
+            isKocom,
+            hasData
           };
         })
         .sort((a, b) => b.cycleStart - a.cycleStart);
     }
 
     function getStats() {
-      if (!readings.length) return null;
-      
-      const latestManual = readings[readings.length - 1];
-      const latestManualDate = new Date(latestManual.at);
-      const cycleStart = getCycleStart(latestManualDate);
-      const cycleEnd = getCycleEnd(latestManualDate);
-      const baseline = getBaseline(latestManual);
-      
+      if (!readings.length && !kocomReadings.length) return null;
+
+      const now = new Date();
+      const cycleStart = getCycleStart(now);
+      const cycleEnd = getCycleEnd(now);
+
+      // 이번 검침 주기에 해당하는 수동 검침
+      const manualInCycle = readings.filter((item) => {
+        const itemDate = new Date(item.at);
+        return itemDate >= cycleStart && itemDate <= cycleEnd;
+      }).sort(sortByDate);
+
+      const hasManual = manualInCycle.length > 0;
+      const latestManual = hasManual ? manualInCycle.at(-1) : null;
+      const latestManualDate = latestManual ? new Date(latestManual.at) : null;
+      const baseline = getBaseline(latestManual, cycleStart);
+
       // 이번 검침 주기에 해당하는 Kocom 자동 검침 데이터 필터링
       const kocomInCycle = kocomReadings.filter((point) => {
         const ptDate = new Date(point.at);
         return ptDate >= cycleStart && ptDate <= cycleEnd;
       });
-      
+
       let latest = latestManual;
-      let latestDate = latestManualDate;
-      let usage = Math.max(0, Number(latestManual.value) - baseline.value);
+      let latestDate = latestManualDate || now;
+      let usage = hasManual ? Math.max(0, Number(latestManual.value) - baseline.value) : 0;
       let isKocom = false;
-      
-      // 자동 검침이 있고, 수동 검침보다 더 최신인 경우 자동 검침을 누적사용량 기준으로 사용
+
+      // 자동 검침이 있고, 수동 검침보다 더 최신이거나 수동 검침이 없는 경우 자동 검침을 사용
       if (kocomInCycle.length > 0) {
         const latestKocom = kocomInCycle[kocomInCycle.length - 1];
         const latestKocomDate = new Date(latestKocom.at);
-        if (latestKocomDate > latestManualDate) {
+        if (!latestManualDate || latestKocomDate > latestManualDate) {
           latest = latestKocom;
           latestDate = latestKocomDate;
           usage = latestKocom.value;
           isKocom = true;
         }
       }
-      
-      const elapsedFromCycleStart = Math.max((latestDate - cycleStart) / MS_PER_DAY, 0);
-      const elapsedDaysExact = Math.max((latestDate - baseline.at) / MS_PER_DAY, 0);
+
+      const hasData = hasManual || kocomInCycle.length > 0;
+      const elapsedFromCycleStart = Math.max((now - cycleStart) / MS_PER_DAY, 0);
+      const elapsedDaysExact = hasData ? Math.max((latestDate - baseline.at) / MS_PER_DAY, 0) : 0;
       const elapsedDaysForRead = Math.max(1, Math.ceil(elapsedDaysExact));
       const cycleDays = (cycleEnd - cycleStart) / MS_PER_DAY;
       const projected = elapsedDaysExact > 0 ? (usage / elapsedDaysExact) * cycleDays : usage;
@@ -1410,12 +1450,13 @@
         cycleDays,
         usage,
         elapsedFromCycleStart,
-        dailyByRead: usage / elapsedDaysForRead,
+        dailyByRead: elapsedDaysForRead > 0 ? usage / elapsedDaysForRead : 0,
         dailyByTime: elapsedDaysExact > 0 ? usage / elapsedDaysExact : 0,
         projected,
         projectedBill: calculateElectricBill(projected, cycleStart),
         baseline,
-        isKocom
+        isKocom,
+        hasData
       };
     }
 
@@ -1444,8 +1485,8 @@
       dailyByTime.innerHTML = `${fmtNumber.format(stats.dailyByTime)} <span class="unit">kWh</span>`;
       currentUsage.innerHTML = `${fmtNumber1.format(stats.usage)} <span class="unit">kWh</span>`;
       
-      const sourceColor = stats.isKocom ? 'var(--ok)' : 'var(--accent)';
-      const sourceText = stats.isKocom ? '자동' : '수동';
+      const sourceColor = stats.isKocom ? 'var(--ok)' : (stats.hasData ? 'var(--accent)' : 'var(--muted)');
+      const sourceText = stats.isKocom ? '자동' : (stats.hasData ? '수동' : '대기');
       currentUsageTitle.innerHTML = `누적사용량 (${stats.elapsedFromCycleStart.toFixed(1)}일 · <span style="color: ${sourceColor}; font-weight: 700;">${sourceText}</span>)`;
       projectedUsageTitle.textContent = `월 예상 사용량 (${Math.round(stats.cycleDays)}일)`;
       projectedUsage.innerHTML = `${fmtNumber1.format(stats.projected)} <span class="unit">kWh</span>`;
@@ -1468,7 +1509,9 @@
     }
 
     function formatCycleLabel(start, end) {
-      return `${start.getFullYear()}.${String(start.getMonth() + 1).padStart(2, "0")}.${String(start.getDate()).padStart(2, "0")} ~ ${end.getFullYear()}.${String(end.getMonth() + 1).padStart(2, "0")}.${String(end.getDate()).padStart(2, "0")}`;
+      const s = `${start.getFullYear()}.${String(start.getMonth() + 1).padStart(2, "0")}.${String(start.getDate()).padStart(2, "0")}`;
+      const e = `${end.getFullYear()}.${String(end.getMonth() + 1).padStart(2, "0")}.${String(end.getDate()).padStart(2, "0")}`;
+      return `${s} ~ ${e}`;
     }
 
     function getRateTierSummary(bill) {
@@ -1540,22 +1583,28 @@
         return;
       }
 
-      const currentKey = getCycleKey(new Date(readings.at(-1).at));
+      const currentKey = getCycleKey(new Date());
       monthlyList.innerHTML = summaries
         .map((summary) => {
           const isCurrent = summary.key === currentKey;
-          const isProportional = summary.hasGap || isCurrent;
+          
+          // 전월(과거 주기)이고 마지막 검침이 cycleEnd(10일 00시) 이전이라면 10일 00시 비례 환산치(projected)를 확정치로 채택
+          const isExactEndOfCycle = summary.elapsedDaysExact >= (summary.cycleDays - 0.01);
+          const isEstimatedFinal = !isCurrent && summary.hasData && !isExactEndOfCycle;
+          const finalUsage = isEstimatedFinal ? summary.projected : summary.usage;
+          const finalBill = isEstimatedFinal ? summary.projectedBill : summary.measuredBill;
+
           return `
           <article class="month-item ${isCurrent ? "current" : ""}">
             <div class="month-top">
               <div class="month-period">${formatCycleLabel(summary.cycleStart, summary.cycleEnd)}</div>
-              <div class="month-usage">${fmtNumber1.format(summary.usage)} kWh</div>
+              <div class="month-usage">${fmtNumber1.format(finalUsage)} kWh</div>
             </div>
-            ${isProportional ? (
+            ${isCurrent ? (
               summary.isInitialPhase ? `
               <div class="month-proj-row quiet">
                 <span class="proj-badge quiet">측정 초기</span>
-                <span class="proj-sub-text">1일 미만 수집 중 (예상 환산 보정 중)</span>
+                <span class="proj-sub-text">${summary.hasData ? "1일 미만 수집 중 (예상 환산 보정 중)" : "검침 대기 중"}</span>
               </div>
               ` : `
               <div class="month-proj-row">
@@ -1567,11 +1616,12 @@
             ) : `
             <div class="month-proj-row quiet">
               <span class="proj-badge quiet">확정 요금</span>
-              <span class="proj-val quiet">${fmtWon.format(summary.measuredBill.total)}원</span>
+              <span class="proj-val quiet">${fmtWon.format(finalBill.total)}원</span>
+              ${isEstimatedFinal ? `<span class="proj-sub-text" style="margin-left: 6px; font-size: 11px; color: var(--muted);">(10일 00시 환산)</span>` : ""}
             </div>
             `}
             <div class="month-meta">
-              <span>최신 ${formatShort(summary.latestDate)} (${summary.isKocom ? "자동" : "수동"})</span>
+              <span>${summary.hasData ? `최신 ${formatShort(summary.latestDate)} (${summary.isKocom ? "자동" : "수동"})` : "검침 대기 중"}</span>
             </div>
           </article>
         `;
@@ -1648,33 +1698,41 @@
 
       drawGrid(width, height, pad, maxUsage);
 
-      ctx.strokeStyle = "#d97706";
-      ctx.setLineDash([7, 6]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(xOf(stats.cycleStart), yOf(0));
-      ctx.lineTo(xOf(stats.cycleEnd), yOf(stats.projected));
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (stats.projected > 0) {
+        ctx.strokeStyle = "#d97706";
+        ctx.setLineDash([7, 6]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(xOf(stats.cycleStart), yOf(0));
+        ctx.lineTo(xOf(stats.cycleEnd), yOf(stats.projected));
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
-      ctx.strokeStyle = "#0b7285";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      points.forEach((point, index) => {
-        const x = xOf(point.at);
-        const y = yOf(point.usage);
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      if (cycleReadings.length > 0) {
+        ctx.strokeStyle = "#0b7285";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          const x = xOf(point.at);
+          const y = yOf(point.usage);
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
 
       // Kocom 실시간 사용량 그래프 그리기
       if (kocomPointsInCycle.length) {
         ctx.strokeStyle = "#247348";
         ctx.lineWidth = 2.5;
         ctx.beginPath();
-        kocomPointsInCycle.forEach((point, index) => {
-          const x = xOf(new Date(point.at));
+        const kocomPathPoints = [
+          { at: stats.cycleStart, value: 0 },
+          ...kocomPointsInCycle.map((point) => ({ at: new Date(point.at), value: point.value }))
+        ];
+        kocomPathPoints.forEach((point, index) => {
+          const x = xOf(point.at);
           const y = yOf(point.value);
           if (index === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
@@ -1694,17 +1752,19 @@
         });
       }
 
-      points.forEach((point) => {
-        const x = xOf(point.at);
-        const y = yOf(point.usage);
-        ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = "#0b7285";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      });
+      if (cycleReadings.length > 0) {
+        points.filter((point) => point.source).forEach((point) => {
+          const x = xOf(point.at);
+          const y = yOf(point.usage);
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeStyle = "#0b7285";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        });
+      }
 
       const manualHoverPoints = points
         .filter((point) => point.source)
