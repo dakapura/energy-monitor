@@ -1,0 +1,22 @@
+# [보안] 로컬 실행 백엔드 스크립트 (GitHub 노출 차단)
+kocom.py
+server.py
+sync_utils.py
+sync_config.json
+*.bat
+*.vbs
+
+# 로그 & 대용량 파일
+*.log
+*.csv
+
+# 백업 & 임시 파일
+*.bak
+*.bak_pre_fix
+*.tmp
+*.pyc
+__pycache__/
+
+# 개발용 임시 파일
+scratch_test.js
+electric-meter-readings-*.json

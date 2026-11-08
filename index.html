@@ -950,11 +950,7 @@
   <script>
     // ----------------------------------------------------
     // [클라우드 연동 설정]
-    // 외부 인터넷(GitHub Pages) 조회 시 사용될 Public Bin ID입니다.
-    // 1단계에서 생성하신 Bin ID 값을 아래에 입력해 주세요. (마스터 키가 아니므로 보안상 안전합니다)
-    // ----------------------------------------------------
-    const CLOUD_BIN_READINGS = "6a578e56da38895dfe612525";
-    const CLOUD_BIN_KOCOM = "6a578e44da38895dfe6124a6";
+    // GitHub Pages 배포 환경에서는 저장소 내의 readings.json 및 kocom_readings.json을 직접 fetch합니다.
     // ----------------------------------------------------
 
     const isLocal = window.location.hostname === 'localhost' ||
@@ -1047,7 +1043,7 @@
       try {
         const url = isLocal
           ? "/api/readings"
-          : `https://api.jsonbin.io/v3/b/${CLOUD_BIN_READINGS}/latest?meta=false`;
+          : `./readings.json?_t=${Date.now()}`;
         const res = await fetch(url, isLocal ? {} : {
           headers: {
             "Cache-Control": "no-cache"
@@ -1100,7 +1096,7 @@
       try {
         const url = isLocal
           ? "/api/kocom_readings"
-          : `https://api.jsonbin.io/v3/b/${CLOUD_BIN_KOCOM}/latest?meta=false`;
+          : `./kocom_readings.json?_t=${Date.now()}`;
         const res = await fetch(url, isLocal ? { cache: "no-store" } : {
           headers: {
             "Cache-Control": "no-cache"
